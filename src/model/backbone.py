@@ -14,3 +14,7 @@ class SimpleBackbone(nn.Module):
 
     def __call__(self, x):
         return self.net(x)
+    
+    def parameters(self):
+        return self.net.parameters()
+

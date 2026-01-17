@@ -8,3 +8,6 @@ class YOLOHead(nn.Module):
 
     def __call__(self, feats):
         return self.pred(feats)
+
+    def parameters(self):
+        return self.pred.parameters()
