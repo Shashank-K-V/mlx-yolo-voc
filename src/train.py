@@ -23,22 +23,39 @@ def main():
     params.update(head.parameters())
 
     optimizer = optim.SGD(learning_rate=5e-3)
+    # BEFORE training (use first sample explicitly)
+    img_chw, boxes, labels = ds[0]
+    x = mx.array(img_chw).transpose(1, 2, 0)[None, ...]
+    feats = backbone(x)
+    y = head(feats)
+    pred_np = np.array(y[0])
+    boxes_pred, scores_pred, _ = decode_yolo_v1(pred_np, conf_thresh=0.2)
+    keep = nms(boxes_pred, scores_pred)
 
+    draw_boxes(
+        f"data/coco-mini/images/000000000001.jpg",
+        boxes_pred[keep],
+        scores_pred[keep],
+        out_path="assets/pred_before.png"
+    )
     for epoch in range(20):
-        img_chw, boxes, labels = ds[0]
-        x = mx.array(img_chw).transpose(1, 2, 0)[None, ...]
+        epoch_loss = 0.0
 
-        def loss_fn(p):
-            feats = backbone(x)
-            y = head(feats)
-            return yolo_v1_loss(y, boxes, labels)
+        for idx in range(len(ds)):
+            img_chw, boxes, labels = ds[idx]
+            x = mx.array(img_chw).transpose(1, 2, 0)[None, ...]
 
-        loss, grads = mx.value_and_grad(loss_fn)(params)
-        optimizer.update(params, grads)
+            def loss_fn(p):
+                feats = backbone(x)
+                y = head(feats)
+                return yolo_v1_loss(y, boxes, labels)
+
+            loss, grads = mx.value_and_grad(loss_fn)(params)
+            optimizer.update(params, grads)
+            epoch_loss += loss.item()
 
         if epoch % 2 == 0:
-            print(f"epoch {epoch:02d} | loss {loss.item():.4f}")
-
+            print(f"epoch {epoch:02d} | avg loss {(epoch_loss / len(ds)):.4f}")
 
 if __name__ == "__main__":
     main()
