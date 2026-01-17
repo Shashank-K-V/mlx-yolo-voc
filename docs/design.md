@@ -1,0 +1,1 @@
+“MLX Conv2D expects NHWC layout, unlike PyTorch’s NCHW. All data pipelines explicitly transpose tensors before model execution.”
