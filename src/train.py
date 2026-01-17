@@ -3,6 +3,9 @@ import mlx.core as mx
 from src.dataset.coco_loader import COCOMiniDataset
 from src.model.backbone import SimpleBackbone
 from src.model.head import YOLOHead
+from src.model.yolo_losses import yolo_v1_loss
+
+
 
 def main():
     ds = COCOMiniDataset(
@@ -21,9 +24,13 @@ def main():
     feats = backbone(x)
     y = head(feats)
 
+    loss = yolo_v1_loss(y, boxes, labels)
+
+
     print("x:", x.shape)
     print("feats:", feats.shape)
     print("y:", y.shape)
+    print("loss:", loss.item())
     print("boxes:", boxes.shape, "labels:", labels)
 
 if __name__ == "__main__":
