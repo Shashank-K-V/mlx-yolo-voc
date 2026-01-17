@@ -52,9 +52,9 @@ def yolo_v1_loss(pred, boxes, labels, img_size=224, lambda_coord=5.0, lambda_noo
     # Loss components
     box_loss = lambda_coord * mx.sum(obj_mask * (pred[..., :4] - target[..., :4]) ** 2)
     obj_loss = mx.sum(obj_mask * (pred[..., 4:5] - target[..., 4:5]) ** 2)
-    #noobj_loss = lambda_noobj * mx.sum(noobj_mask * (pred[..., 4:5]) ** 2)
-    noobj_loss = 0.0
+    noobj_loss = lambda_noobj * mx.sum(noobj_mask * (pred[..., 4:5]) ** 2)
+    #noobj_loss = 0.0
 
-    #cls_loss = mx.sum(obj_mask * (pred[..., 5:] - target[..., 5:]) ** 2)
-    cls_loss =0.0
+    cls_loss = mx.sum(obj_mask * (pred[..., 5:] - target[..., 5:]) ** 2)
+    #cls_loss =0.0
     return box_loss + obj_loss + noobj_loss + cls_loss
