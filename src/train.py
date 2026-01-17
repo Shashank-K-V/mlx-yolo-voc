@@ -22,7 +22,7 @@ def main():
     params.update(backbone.parameters())
     params.update(head.parameters())
 
-    optimizer = optim.SGD(learning_rate=1e-3)
+    optimizer = optim.SGD(learning_rate=5e-3)
 
     for epoch in range(20):
         img_chw, boxes, labels = ds[0]
