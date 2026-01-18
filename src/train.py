@@ -1,61 +1,108 @@
 import mlx.core as mx
+import mlx.nn as nn
+import mlx.optimizers as optim
 import numpy as np
-from src.dataset.coco_loader import COCOMiniDataset
+import os
+
+from src.dataset.coco_loader import COCODataset
 from src.model.backbone import SimpleBackbone
 from src.model.head import YOLOHead
+from src.model.detector import YOLODetector
 from src.model.yolo_losses import yolo_v1_loss
-from src.utils.box_ops import decode_yolo_v1, nms
+from src.utils.box_ops import decode_yolo, nms
 from src.utils.viz import draw_boxes
-from src.utils.optim import SGD
-import mlx.optimizers as optim
+
 
 def main():
-    ds = COCOMiniDataset(
-        root="data/coco-mini/images",
-        ann_file="data/coco-mini/annotations/instances_train.json"
+    # -----------------------------
+    # Config
+    # -----------------------------
+    IMG_SIZE = 224
+    EPOCHS = 20
+    SAMPLES_PER_EPOCH = 10
+    LR = 1e-3
+
+    os.makedirs("assets", exist_ok=True)
+
+    # -----------------------------
+    # Dataset (COCO val2017, person-only)
+    # -----------------------------
+    ds = COCODataset(
+        root="data/coco-real/images/val2017",
+        ann_file="data/coco-real/annotations/instances_val2017.json",
+        img_size=IMG_SIZE
     )
 
-    backbone = SimpleBackbone()
-    head = YOLOHead(num_classes=1)
+    # -----------------------------
+    # Model
+    # -----------------------------
+    backbone = SimpleBackbone()              # outputs (1, 7, 7, 256)
+    head = YOLOHead(in_channels=256)         # outputs (1, 7, 7, 6)
+    model = YOLODetector(backbone, head)     # SINGLE MLX MODULE
 
-    params = {}
-    params.update(backbone.parameters())
-    params.update(head.parameters())
+    optimizer = optim.SGD(learning_rate=LR)
 
-    optimizer = optim.SGD(learning_rate=5e-3)
-    # BEFORE training (use first sample explicitly)
-    img_chw, boxes, labels = ds[0]
-    x = mx.array(img_chw).transpose(1, 2, 0)[None, ...]
-    feats = backbone(x)
-    y = head(feats)
-    pred_np = np.array(y[0])
-    boxes_pred, scores_pred, _ = decode_yolo_v1(pred_np, conf_thresh=0.2)
-    keep = nms(boxes_pred, scores_pred)
+    # -----------------------------
+    # BEFORE TRAINING (visual sanity check)
+    # -----------------------------
+    img, _, _ = ds[0]
+    x = mx.array(img).transpose(1, 2, 0)[None, ...]
 
+    y = model(x)
+    boxes, scores = decode_yolo(np.array(y[0]), img_size=IMG_SIZE)
+    keep = nms(boxes, scores)
+
+    img_name = ds.images[ds.image_ids[0]]["file_name"]
     draw_boxes(
-        f"data/coco-mini/images/000000000001.jpg",
-        boxes_pred[keep],
-        scores_pred[keep],
-        out_path="assets/pred_before.png"
+        f"data/coco-real/images/val2017/{img_name}",
+        boxes[keep],
+        scores[keep],
+        "assets/pred_before.png"
     )
-    for epoch in range(20):
+
+    print("Saved assets/pred_before.png")
+
+    # -----------------------------
+    # TRAINING LOOP (REAL GRADIENTS)
+    # -----------------------------
+    for epoch in range(EPOCHS):
         epoch_loss = 0.0
 
-        for idx in range(len(ds)):
-            img_chw, boxes, labels = ds[idx]
-            x = mx.array(img_chw).transpose(1, 2, 0)[None, ...]
+        for i in range(min(SAMPLES_PER_EPOCH, len(ds))):
+            img, boxes, labels = ds[i]
+            x = mx.array(img).transpose(1, 2, 0)[None, ...]
 
-            def loss_fn(p):
-                feats = backbone(x)
-                y = head(feats)
-                return yolo_v1_loss(y, boxes, labels)
+            # MLX-correct autograd:
+            # differentiate w.r.t. *model*, not params or functions
+            vg_fn = nn.value_and_grad(
+                model,
+                lambda: yolo_v1_loss(model(x), boxes, labels, img_size=IMG_SIZE)
+                
+            )
 
-            loss, grads = mx.value_and_grad(loss_fn)(params)
-            optimizer.update(params, grads)
+            loss, grads = vg_fn()
+            optimizer.update(model, grads)
+
             epoch_loss += loss.item()
 
-        if epoch % 2 == 0:
-            print(f"epoch {epoch:02d} | avg loss {(epoch_loss / len(ds)):.4f}")
+        print(f"epoch {epoch:02d} | loss {epoch_loss / SAMPLES_PER_EPOCH:.4f}")
+
+    # -----------------------------
+    # AFTER TRAINING (qualitative check)
+    # -----------------------------
+    y = model(x)
+    boxes, scores = decode_yolo(np.array(y[0]), img_size=IMG_SIZE)
+    keep = nms(boxes, scores)
+
+    draw_boxes(
+        f"data/coco-real/images/val2017/{img_name}",
+        boxes[keep],
+        scores[keep],
+        "assets/pred_after.png"
+    )
+
+    print("Saved assets/pred_after.png")
+
 
 if __name__ == "__main__":
     main()

@@ -1,60 +1,30 @@
-# src/model/yolo_loss.py
-
 import mlx.core as mx
 import numpy as np
 
-
-def yolo_v1_loss(pred, boxes, labels, img_size=224, lambda_coord=5.0, lambda_noobj=0.05):
-    """
-    pred: (B, S, S, 5 + C)
-    boxes: (N, 4) in absolute image coords (x1, y1, x2, y2)
-    labels: list of class ids
-    """
-
+def yolo_v1_loss(pred, boxes, labels, img_size=224):
     B, S, _, D = pred.shape
-    C = D - 5
 
-    # Build target in NumPy (clean + explicit)
-    target_np = np.zeros((B, S, S, 5 + C), dtype=np.float32)
+    if len(boxes) == 0:
+        return mx.sum(pred[..., 4] ** 2)
 
-    # Week-2 scope: one image, one object
-    box = boxes[0]
-    cls = labels[0] - 1  # COCO category ids start at 1
+    target = np.zeros((B, S, S, 6), dtype=np.float32)
 
-    x1, y1, x2, y2 = box
-    cx = (x1 + x2) / 2.0
-    cy = (y1 + y2) / 2.0
+    x1, y1, x2, y2 = boxes[0]
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
     w = x2 - x1
     h = y2 - y1
 
-    cell_size = img_size / S
-    i = int(cx / cell_size)
-    j = int(cy / cell_size)
+    cell = img_size / S
+    i = min(int(cx / cell), S - 1)
+    j = min(int(cy / cell), S - 1)
 
-    # Normalize targets
-    tx = (cx - i * cell_size) / cell_size
-    ty = (cy - j * cell_size) / cell_size
-    tw = w / img_size
-    th = h / img_size
+    target[0, j, i, 0] = (cx - i * cell) / cell
+    target[0, j, i, 1] = (cy - j * cell) / cell
+    target[0, j, i, 2] = w / img_size
+    target[0, j, i, 3] = h / img_size
+    target[0, j, i, 4] = 1.0
+    target[0, j, i, 5] = 1.0
 
-    target_np[0, j, i, 0] = tx
-    target_np[0, j, i, 1] = ty
-    target_np[0, j, i, 2] = tw
-    target_np[0, j, i, 3] = th
-    target_np[0, j, i, 4] = 1.0  # objectness
-    target_np[0, j, i, 5 + cls] = 1.0
-
-    target = mx.array(target_np)
-
-    obj_mask = target[..., 4:5]
-    noobj_mask = 1.0 - obj_mask
-
-    # Loss components
-    box_loss = lambda_coord * mx.sum(obj_mask * (pred[..., :4] - target[..., :4]) ** 2)
-    obj_loss = mx.sum(obj_mask * (pred[..., 4:5] - target[..., 4:5]) ** 2)
-    noobj_loss = lambda_noobj * mx.sum(noobj_mask * (pred[..., 4:5]) ** 2)
-    #noobj_loss = 0.0
-
-    cls_loss = mx.sum(obj_mask * (pred[..., 5:] - target[..., 5:]) ** 2)
-    #cls_loss =0.0
-    return box_loss + obj_loss + noobj_loss + cls_loss
+    target = mx.array(target)
+    return mx.sum((pred - target) ** 2)

@@ -1,18 +1,11 @@
-# src/utils/viz.py
-
 from PIL import Image, ImageDraw
 
-
-def draw_boxes(image_path, boxes, scores=None, out_path="assets/pred.png"):
+def draw_boxes(image_path, boxes, scores, out_path):
     img = Image.open(image_path).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    for k, box in enumerate(boxes):
-        x1, y1, x2, y2 = box
-        draw.rectangle([x1, y1, x2, y2], width=2)
-
-        if scores is not None:
-            draw.text((x1, y1), f"{scores[k]:.2f}")
+    for box, score in zip(boxes, scores):
+        draw.rectangle(box, outline="red", width=2)
+        draw.text((box[0], box[1]), f"{score:.2f}", fill="red")
 
     img.save(out_path)
-    return out_path
