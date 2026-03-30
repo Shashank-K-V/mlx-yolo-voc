@@ -94,14 +94,6 @@ Input (224×224×3)
 | Hardware | Apple Silicon (MLX) |
 | NaN explosions | 0 |
 
-Training curves and qualitative detection results are saved to `assets/`.
-
-### Before vs After Training
-
-| Before | After |
-|--------|-------|
-| ![Before](assets/pred_before.png) | ![After](assets/pred_after.png) |
-
 ---
 
 ## Project Structure
